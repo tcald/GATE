@@ -846,7 +846,7 @@ fitNULLGLMM = function(plinkFile = "",
 		minMAFforGRM = 0.01,
 		useSparseGRMtoFitNULL=FALSE,
 		updateModelFile = FALSE){
-
+  startTime = as.numeric(Sys.time())
   #if traitType != "survival", ignore eventTimeCol
   if(eventTimeCol != "" & traitType != "survival"){
     cat("WARNING: eventTimeCol is specified but the traitType is not survival, survival analysis is NOT performed\n")    
@@ -1302,6 +1302,11 @@ fitNULLGLMM = function(plinkFile = "",
 		useSparseGRMforvarRatioDenom = useSparseGRMforvarRatioDenom)
 
     closeGenoFile_plink()
+    endTime = as.numeric(Sys.time()) #end time of the SPAGMMAT tests
+    cat("Analysis ended at ", endTime, "Seconds\n")
+    tookTime = endTime - startTime
+    cat("Analysis took ", tookTime, "Seconds\n")
+    return(tookTime)
 
   }else if(traitType == "quantitative"){
 

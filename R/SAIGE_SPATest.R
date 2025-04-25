@@ -100,9 +100,11 @@ SPAGMMATtest = function(bgenFile = "",
 	 	 minMACfordosageZerod=30,	 
 		 IsOutputPvalueNAinGroupTestforBinary = FALSE,
 		 IsAccountforCasecontrolImbalanceinGroupTest = TRUE,
-		 IsOutputBETASEinBurdenTest = FALSE,
+	 IsOutputBETASEinBurdenTest = FALSE,
 		 IsSPAfast = TRUE,
-		NoMissingDosage = TRUE){
+         NoMissingDosage = TRUE){
+
+    nvariants = 0;
 
   if(weightMAFcutoff < 0 | weightMAFcutoff > 0.5){
     stop("weightMAFcutoff needs to be between 0 and 0.5\n")
@@ -415,7 +417,7 @@ SPAGMMATtest = function(bgenFile = "",
       SetSampleIdx(sampleIndex, N)
       Gx_cond = getGenoOfGene_bgen(bgenFile,bgenFileIndex, conditionlist, testMinMAF, 0.5, minInfo)
       if(Gx_cond$cnt > 0){
-        dosage_cond = matrix(Gx_cond$dosages, byrow=F, ncol = Gx_cond$cnt)	
+          dosage_cond = matrix(Gx_cond$dosages, byrow=F, ncol = Gx_cond$cnt)
         dosage_cond = as(dosage_cond, "sparseMatrix") 
       }	
     }else{
@@ -715,6 +717,7 @@ cat("It is a survival trait\n")
         isVariant = FALSE
         stop("ERROR! Failed to open ", bgenFile, "\n")
       }
+      nvariants = Mtest
       isQuery = getQueryStatus()
       SetSampleIdx(sampleIndex, N)
 
@@ -745,12 +748,18 @@ cat("It is a survival trait\n")
 
     write(resultHeader,file = SAIGEOutputFile, ncolumns = length(resultHeader))
     OUT = NULL
+    OUTrow = 1
     numPassMarker = 0
     mth = 0
 
-
-
+    tsum = 0.0
     while(isVariant){
+      if(OUTrow > nvariants){
+          cat("Error output row reached", OUTrow,
+              "expecting only", nvariants, "variants\n")
+          break
+      }
+      t0 = Sys.time()
       mth = mth + 1
       if (dosageFileType == "bgen"){
         if(isQuery){
@@ -879,8 +888,7 @@ cat("It is a survival trait\n")
 	AF_Allele2.sub = AC_Allele2.sub/(2*N.sub)
 	
 	MAF.sub = min(AF_Allele2.sub, 1-AF_Allele2.sub)
-	
-	
+
 if(MAF.sub >= testMinMAF){
   numPassMarker = numPassMarker + 1
 
@@ -930,8 +938,7 @@ if(MAF.sub >= testMinMAF){
 	  if (NCase.sub == 0 | NCtrl.sub == 0) {	
 	   #out1 = c(rep(NA, 8), NCase.sub, NCtrl.sub)
 	   out1 = c(rep(NA, 8))
-	   OUTvec=c(rowHeader, N.sub, unlist(out1))
-            # OUT = rbind(OUT, c(rowHeader, N.sub, unlist(out1)))	
+           OUTvec=c(rowHeader, N.sub, unlist(out1))
 	   if(IsOutputAFinCaseCtrl){
 	     if(NCase.sub == 0){
 		AFCase = NA
@@ -940,7 +947,6 @@ if(MAF.sub >= testMinMAF){
 		AFCtrl = NA
 		AFCase = sum(G0[y1Index.sub])/(2*NCase.sub)
 	     }	
-	     #OUT = rbind(OUT, c(rowHeader, N.sub, unlist(out1), AFCase, AFCtrl))	
 	     OUTvec=c(OUTvec, AFCase, AFCtrl)
 	   }
 
@@ -949,8 +955,12 @@ if(MAF.sub >= testMinMAF){
 	   }
    	  if(IsOutputHetHomCountsinCaseCtrl){
                 OUTvec=c(OUTvec, homN_Allele2_cases, hetN_Allele2_cases, homN_Allele2_ctrls, hetN_Allele2_ctrls)
-	}
-	   OUT = rbind(OUT, OUTvec)
+          }
+
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                         ncol=length(OUTvec))
+           OUT[OUTrow,] = OUTvec
+           OUTrow = OUTrow + 1
 	   OUTvec=NULL
 	  }else{ #if (NCase.sub == 0 | NCtrl.sub == 0) {
 		if(traitType == "binary"){
@@ -973,7 +983,6 @@ if(MAF.sub >= testMinMAF){
              AFCase = sum(G0[y1Index.sub])/(2*NCase.sub)
              AFCtrl = sum(G0[y0Index.sub])/(2*NCtrl.sub)
 	     OUTvec=c(OUTvec, AFCase, AFCtrl)
-             #OUT = rbind(OUT, c(rowHeader, N.sub, unlist(out1), AFCase, AFCtrl))
             }
 	   if(IsOutputNinCaseCtrl){
              OUTvec=c(OUTvec, NCase.sub, NCtrl.sub)
@@ -984,19 +993,27 @@ if(MAF.sub >= testMinMAF){
                 OUTvec=c(OUTvec, homN_Allele2_cases, hetN_Allele2_cases, homN_Allele2_ctrls, hetN_Allele2_ctrls)
 	  }
 
-
-	   OUT = rbind(OUT, OUTvec)
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                        ncol=length(OUTvec))
+           OUT[OUTrow,] = OUTvec
+           OUTrow = OUTrow + 1
 	   OUTvec=NULL
 	  }
          }else if(traitType == "quantitative"){
 
            out1 = scoreTest_SAIGE_quantitativeTrait_sparseSigma(G0,obj.glmm.null.sub$obj.noK, AC, AF, y.sub, mu.sub, varRatio, tauVec, sparseSigma=sparseSigma.sub, isCondition=isCondition, OUT_cond=OUT_cond.sub, G1tilde_P_G2tilde = G1tilde_P_G2tilde.sub, G2tilde_P_G2tilde_inv = G2tilde_P_G2tilde_inv.sub)
 
+           tmprow = NULL
            if(!isCondition){
-             OUT = rbind(OUT, c(rowHeader, N.sub, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2))
+             tmprow = c(rowHeader, N.sub, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2)
            }else{
-             OUT = rbind(OUT, c(rowHeader, N.sub, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2, out1$Tstat_c,  out1$p.value.c, out1$var1_c, out1$BETA_c, out1$SE_c))
+             tmprow = c(rowHeader, N.sub, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2, out1$Tstat_c,  out1$p.value.c, out1$var1_c, out1$BETA_c, out1$SE_c)
            }
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                         ncol=length(tmprow))
+           OUT[OUTrow,] = tmprow
+           OUTrow = OUTrow + 1
+           tmprow = NULL
          }
 
 
@@ -1016,9 +1033,8 @@ if(MAF.sub >= testMinMAF){
 		}	
         }
 
-   
-if(MAF >= testMinMAF){
-	  numPassMarker = numPassMarker + 1
+       if(MAF >= testMinMAF){
+         numPassMarker = numPassMarker + 1
 
 	 if(isCondition){
            condpre2 = getCovMandOUT_cond(G0 = G0, dosage_cond = dosage_cond, cateVarRatioMinMACVecExclude = cateVarRatioMinMACVecExclude, cateVarRatioMaxMACVecInclude = cateVarRatioMaxMACVecInclude, ratioVec = ratioVec, obj.glmm.null = obj.glmm.null, sparseSigma = sparseSigma, covM = condpre$covM, mu2.a = mu2.a)
@@ -1052,10 +1068,10 @@ if(MAF >= testMinMAF){
 	     OUTvec = c(OUTvec, homN_Allele2_cases, hetN_Allele2_cases, homN_Allele2_ctrls, hetN_Allele2_ctrls)	
 	}
 
-
-
-
-	   OUT = rbind(OUT, OUTvec)
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                        ncol=length(OUTvec));
+           OUT[OUTrow,] = OUTvec
+           OUTrow = OUTrow + 1
 	   OUTvec=NULL
 
          }else if(traitType == "survival"){
@@ -1086,18 +1102,28 @@ if(MAF >= testMinMAF){
 	     hetN_Allele2_ctrls = sum(G0round[y0Index] == 1)
 	     OUTvec = c(OUTvec, homN_Allele2_cases, hetN_Allele2_cases, homN_Allele2_ctrls, hetN_Allele2_ctrls)	
 	}
-           OUT = rbind(OUT, OUTvec)
+
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                        ncol=length(OUTvec));
+           OUT[OUTrow,] = OUTvec
+           OUTrow = OUTrow + 1
            OUTvec=NULL
 
         }else if(traitType == "quantitative"){
 
            out1 = scoreTest_SAIGE_quantitativeTrait_sparseSigma(G0, obj.glmm.null$obj.noK, AC, AF, y, mu, varRatio, tauVec, sparseSigma=sparseSigma, isCondition=isCondition, OUT_cond=OUT_cond, G1tilde_P_G2tilde = G1tilde_P_G2tilde, G2tilde_P_G2tilde_inv = G2tilde_P_G2tilde_inv)
 
+           tmprow = NULL
            if(!isCondition){
-             OUT = rbind(OUT, c(rowHeader, N, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2))
+             tmprow = c(rowHeader, N, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2)
            }else{
-             OUT = rbind(OUT, c(rowHeader, N, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2, out1$Tstat_c,  out1$p.value.c, out1$var1_c, out1$BETA_c, out1$SE_c))
+             tmprow = c(rowHeader, N, out1$BETA, out1$SE, out1$Tstat, out1$p.value, out1$var1, out1$var2, out1$Tstat_c,  out1$p.value.c, out1$var1_c, out1$BETA_c, out1$SE_c)
            }
+           if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                        ncol=length(tmprow))
+           OUT[OUTrow,] = tmprow
+           OUTrow = OUTrow + 1
+           tmprow = NULL
          }
 
 
@@ -1117,6 +1143,11 @@ if(MAF >= testMinMAF){
          write.table(OUT, SAIGEOutputFile, quote=FALSE, row.names=FALSE, col.names=FALSE, append = TRUE)
          OUT = NULL
        }
+      tsum = tsum + (Sys.time()-t0)*1e3
+      if(mth %% 10000 == 0 && mth > 0){
+          cat("variant", mth-10000, "to", mth-1, "- mean", tsum/10000, "ms/variant\n")
+          tsum = 0.0
+      }
      } ####end of while(isVariant)
 
    }else{ #end if(!isGroupTest){
@@ -1404,12 +1435,14 @@ if(MAF >= testMinMAF){
 		groupTestResult = groupTest(Gmat = Gmat, obj.glmm.null = obj.glmm.null, cateVarRatioMinMACVecExclude = cateVarRatioMinMACVecExclude, cateVarRatioMaxMACVecInclude = cateVarRatioMaxMACVecInclude, ratioVec = ratioVec, G2_cond = dosage_cond, G2_cond_es = OUT_cond[,1], kernel = kernel, method = method, weights.beta.rare = weights.beta.rare, weights.beta.common = weights.beta.common, weightMAFcutoff = weightMAFcutoff, r.corr = r.corr, max_maf = maxMAFforGroupTest, sparseSigma = sparseSigma, mu.a = mu.a, mu2.a = mu2.a, IsSingleVarinGroupTest = IsSingleVarinGroupTest, markerIDs = Gx$markerIDs, markerAFs = Gx$markerAFs, IsSparse= IsSparse, geneID = geneID, Cutoff = Cutoff, adjustCCratioinGroupTest = adjustCCratioinGroupTest, IsOutputPvalueNAinGroupTestforBinary = IsOutputPvalueNAinGroupTestforBinary, weights_specified = weights_specified, weights_for_G2_cond = weights_for_G2_cond_specified, weightsIncludeinGroupFile = weightsIncludeinGroupFile, IsOutputBETASEinBurdenTest = IsOutputBETASEinBurdenTest)	
 	     }
 	    outVec = groupTestResult$outVec
-	    OUT = rbind(OUT, outVec)
+            if(is.null(OUT)) OUT = matrix("", nrow=nvariants,
+                                          ncol=length(outVec))
+            OUT[OUTrow,] = outVec
+            OUTrow = OUTrow + 1
 	    if(IsSingleVarinGroupTest){
             	outsingle = as.data.frame(groupTestResult$OUT_single)
             	OUT_single = rbind(OUT_single, outsingle)
             }
-
 
             mth = mth + 1
             if(mth %% numLinesOutput == 0){
@@ -1456,7 +1489,7 @@ if(MAF >= testMinMAF){
   cat("Analysis ended at ", endTime, "Seconds\n")
   tookTime = endTime - startTime
   cat("Analysis took ", tookTime, "Seconds\n")
-  
+  return(tookTime)
 }
 
 
@@ -1642,10 +1675,18 @@ Score_Test_Sparse_Survival<-function(obj.null, G, mu, mu2, varRatio){
 #    cat("idx_no0 ", idx_no0, "\n")
     #cat("dim(X1) ", dim(X1), "\n")
     #cat("dim(A1) ", dim(A1), "\n")
-    Z = t(A1) %*% g1
-    B<-X1_fg %*% Z
+    Z = as.matrix(t(A1) %*% g1)
     #cat("dim(Z) ", dim(Z), "\n")
-    #cat("dim(B) ", dim(B), "\n")
+    # cat("X1_fg ", X1_fg,"\n")
+    # cat("Z ", Z,"\n")
+    # B<-X1_fg %*% Z
+    # n_rows <- nrow(X1_fg)
+    # n_cols <- ncol(X1_fg)
+    # 
+    # B <- matrix(0, nrow = n_rows, ncol = 1)
+    
+    B<-X1_fg %*% Z
+    # cat("dim(B) ", dim(B), "\n")
     g_tilde1 = g1 - B
     #print(g_tilde1[1:100])
     var2 = t(Z) %*% obj.null$XVX_fg %*% Z - t(B^2) %*% mu21 + t(g_tilde1^2) %*% mu21
@@ -1660,7 +1701,8 @@ Score_Test_Sparse_Survival<-function(obj.null, G, mu, mu2, varRatio){
 
     S2 = -S_a2 %*% Z
   }else{
-    Z = A1 * g1
+    Z = t(A1) %*% g1
+    #cat("dim(Z) ", dim(Z), "\n")
     B<-X1_fg %*% Z
     g_tilde1 = g1 - B
     var2 = t(Z) %*% obj.null$XVX_fg %*% Z - t(B^2) %*% mu21 + t(g_tilde1^2) %*% mu21
@@ -1813,7 +1855,6 @@ scoreTest_SAIGE_binaryTrait=function(G0, AC, AF, MAF, IsSparse, obj.noK, mu.a, m
          #out.score["Tstat"][1] = (-1)*out.score["Tstat"][1]
        }
 
-       #OUT = rbind(OUT, c(rowHeader, N, unlist(out.score)))
        outVec = c(rowHeader, N, unlist(out.score))
        #NSparse=NSparse+1
        Run1=FALSE
@@ -1834,7 +1875,6 @@ scoreTest_SAIGE_binaryTrait=function(G0, AC, AF, MAF, IsSparse, obj.noK, mu.a, m
     }
     out1 = unlist(out1)
 
-    #OUT = rbind(OUT, c(rowHeader, N, out1["BETA"], out1["SE"], out1["Tstat"], out1["p.value"], out1["p.value.NA"], out1["Is.converge"], out1["var1"], out1["var2"]))
     outVec = c(rowHeader, N, out1["BETA"], out1["SE"], out1["Tstat"], out1["p.value"], out1["p.value.NA"], out1["Is.converge"], out1["var1"], out1["var2"])
    }
   return(outVec)
@@ -2361,19 +2401,25 @@ getCovMandOUT_cond_pre = function(dosage_cond, cateVarRatioMinMACVecExclude, cat
 
                 rowHeader = paste0("condMarker_",i)
 
+                tmprow = NULL
                 if(obj.glmm.null$traitType == "binary"){
                         out1 = scoreTest_SAIGE_binaryTrait_cond_sparseSigma(G0, AC, AF, MAF, IsSparse, obj.glmm.null$obj.noK, mu.a, mu2.a, obj.glmm.null$obj.glm.null$y, varRatio, Cutoff, rowHeader, sparseSigma=sparseSigma)
-                        OUT_cond = rbind(OUT_cond, c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1)))
+                        tmprow = c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1))
 
                 }else if(obj.glmm.null$traitType == "quantitative"){
                         out1 = scoreTest_SAIGE_quantitativeTrait_sparseSigma(G0, obj.glmm.null$obj.noK, AC, AF, obj.glmm.null$obj.glm.null$y, mu, varRatio, tauVec = obj.glmm.null$theta, sparseSigma=sparseSigma)
-                        OUT_cond = rbind(OUT_cond, c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1)))
+                        tmprow = c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1))
                 }else if(obj.glmm.null$traitType == "survival"){
 			out1 = scoreTest_SAIGE_survivalTrait_cond_sparseSigma_fast(G0, AC, AF, MAF, IsSparse, obj.glmm.null$obj.noK, mu.a, mu2.a, obj.glmm.null$obj.glm.null$y, varRatio, Cutoff, rowHeader, sparseSigma=sparseSigma)
-			OUT_cond = rbind(OUT_cond, c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1)))
+			tmprow = c(as.numeric(out1$BETA), as.numeric(out1$Tstat), as.numeric(out1$var1))
 		}
 
-                OUT_cond = as.matrix(OUT_cond)
+                if(!is.null(tmprow)){
+                    if(is.null(OUT_cond))
+                        OUT_cond = matrix(0, nrow=ncol(dosage_cond),
+                                          ncol=length(tmprow))
+                    OUT_cond[i,] = tmprow
+                }
         } #end of for(i in 1:ncol(dosage_cond)){
 
         Mcond = ncol(dosage_cond)
